@@ -9,17 +9,38 @@
    #include <iomanip>
    #include <cstdlib>
    
+   // ------------------------------------------------------------
+   //  ヘルパ: うるう年判定 (グレゴリオ暦)
+   // ------------------------------------------------------------
+   static bool isLeap(int year)
+   {
+	   return (year % 400 == 0) || (year % 4 == 0 && year % 100 != 0);
+   }
+   
    static bool isValidDate(const std::string &s)
    {
+	   // 形式 YYYY-MM-DD をチェック
 	   if (s.size() != 10 || s[4] != '-' || s[7] != '-')
 		   return false;
 	   for (std::size_t i = 0; i < s.size(); ++i)
 		   if (i != 4 && i != 7 && !std::isdigit(s[i]))
 			   return false;
+   
+	   int y = std::atoi(s.substr(0,4).c_str());
 	   int m = std::atoi(s.substr(5,2).c_str());
 	   int d = std::atoi(s.substr(8,2).c_str());
-	   if (m < 1 || m > 12 || d < 1 || d > 31)
+   
+	   if (m < 1 || m > 12)
 		   return false;
+   
+	   static const int days[12] = {31,28,31,30,31,30,31,31,30,31,30,31};
+	   int maxDay = days[m-1];
+	   if (m == 2 && isLeap(y))
+		   maxDay = 29;
+   
+	   if (d < 1 || d > maxDay)
+		   return false;
+   
 	   return true;
    }
    
@@ -35,12 +56,12 @@
    int main(int argc, char **argv)
    {
 	   if (argc != 2 && argc != 3) {
-		   std::cerr << "Error: could not open file." << std::endl;
+		   std::cerr << "Usage: ./btc <input_file> [database_file]" << std::endl;
 		   return 1;
 	   }
    
 	   const std::string inputPath = argv[1];
-	   const std::string dbPath    = (argc == 3) ? argv[2] : "data.csv"; // デフォルトは data.csv
+	   const std::string dbPath    = (argc == 3) ? argv[2] : "data.csv";
    
 	   std::ifstream infile(inputPath.c_str());
 	   if (!infile) {
@@ -95,3 +116,4 @@
 	   }
 	   return 0;
    }
+   
