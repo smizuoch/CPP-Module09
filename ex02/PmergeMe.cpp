@@ -1,11 +1,45 @@
 #include "PmergeMe.hpp"
 #include <sstream>
 #include <iostream>
-#include <sys/time.h>
 #include <algorithm>
 #include <cstdlib>
+#include <vector>
+#include <deque>
 
-// ---------------------------- 入力処理 ---------------------------- //
+/* ---------- Jacobsthal utilities : UNIQUE sequence 1,3,5,11,... ---- */
+
+// 1,3,5,11,21,... を n 以下で返す（重複なし／昇順）
+static std::vector<size_t> jacobSequence(size_t n)
+{
+    std::vector<size_t> seq;
+    if (n == 0) return seq;
+
+    size_t a = 1;      // J(1)
+    size_t b = 1;      // J(0)=0 を畳み込み、次計算用に保持
+    while (a <= n) {
+        seq.push_back(a);          // a は毎回一意
+        size_t next = a + 2 * b;   // J(n)=J(n-1)+2*J(n-2)
+        b = a;
+        a = next;
+    }
+    return seq;
+}
+
+// i (1-origin) が Jacobsthal 数か？
+static bool isJacobIndex(size_t i)
+{
+    if (i == 0) return false;
+    size_t a = 1, b = 1;           // J(1)=1, b は J(n-2) 用
+    while (a < i) {
+        size_t next = a + 2 * b;
+        b = a;
+        a = next;
+    }
+    return a == i;
+}
+/* ------------------------------------------------------------------- */
+
+/* ---------------------------- 入力処理 ---------------------------- */
 bool PmergeMe::parseInput(int argc, char **argv, std::vector<int> &out)
 {
     for (int i = 1; i < argc; ++i) {
@@ -18,87 +52,71 @@ bool PmergeMe::parseInput(int argc, char **argv, std::vector<int> &out)
     return !out.empty();
 }
 
-// ----------------- Ford‑Johnson (コンテナ非依存) ------------------ //
-
-template <typename RandIt>
-static void fordJohnson(RandIt begin, RandIt end)
+/* ---------- Ford-Johnson (merge-insertion) sort ---------- */
+template <typename Cont>
+void fordJohnson(Cont &C)
 {
-    typedef typename RandIt::value_type T;
-    std::size_t len = end - begin;
-    if (len < 2) return;
+    typedef typename Cont::value_type value_type;
+    const size_t n = C.size();
+    if (n <= 1) return;                    // base-case
 
-    // 1) 奇数なら末尾 1 要素を straggler として外す
-    bool hasStraggler = (len % 2 != 0);
-    T straggler;
-    if (hasStraggler) {
-        --end;
-        straggler = *end;
-        --len;
-    }
-
-    // 2) ペア作成 (小→pend, 大→main)
-    std::vector<T> pend;       pend.reserve(len / 2);
-    std::vector<T> mainChain;  mainChain.reserve(len / 2);
-
-    for (RandIt it = begin; it < end; it += 2) {
-        T a = *it;
-        T b = *(it + 1);
-        if (b < a) std::swap(a, b);
-        pend.push_back(a);
-        mainChain.push_back(b);
-    }
-
-    // 3) mainChain を挿入ソート (最長でも 1500 要素程度)
-    for (std::size_t i = 1; i < mainChain.size(); ++i) {
-        T key = mainChain[i];
-        std::size_t j = i;
-        while (j && mainChain[j-1] > key) {
-            mainChain[j] = mainChain[j-1];
-            --j;
+    /* 1) ペア分割 */
+    Cont mainChain, pend;
+    typename Cont::iterator it = C.begin();
+    while (it != C.end()) {
+        value_type first = *it++;          // 1 個目
+        if (it == C.end()) {               // straggler
+            pend.push_back(first);
+            break;
         }
-        mainChain[j] = key;
+        value_type second = *it;           // 2 個目
+        if (first > second) std::swap(first, second);
+        mainChain.push_back(second);       // 大 → main
+        pend.push_back(first);             // 小 → pend
+        ++it;
     }
 
-    // 4) Jacobsthal sequence 生成
-    std::vector<std::size_t> jacSeq;
-    for (std::size_t n = 3;; ++n) {
-        unsigned long j2 = 0, j1 = 1, j = 1;
-        for (std::size_t k = 2; k <= n; ++k) { j = j1 + 2 * j2; j2 = j1; j1 = j; }
-        if (j >= pend.size()) break;
-        jacSeq.push_back(j);
+    /* 2) mainChain を再帰的にソート */
+    fordJohnson(mainChain);
+
+    /* 3) straggler を pend 挿入より前に処理 */
+    if (pend.size() > mainChain.size()) {
+        value_type straggler = pend.back();
+        pend.pop_back();
+        mainChain.insert(
+            std::lower_bound(mainChain.begin(), mainChain.end(), straggler),
+            straggler);
     }
 
-    // 5) mainChain を結果ベクタにコピーし、pend を順序通り挿入
-    std::vector<T> result = mainChain;
-    std::vector<bool> done(pend.size(), false);
-
-    for (std::size_t idx = 0; idx < jacSeq.size(); ++idx) {
-        std::size_t p = jacSeq[idx];
-        result.insert(std::upper_bound(result.begin(), result.end(), pend[p]), pend[p]);
-        done[p] = true;
+    /* 4) Jacobsthal シーケンスに従って pend を挿入 */
+    std::vector<size_t> jac = jacobSequence(pend.size());   // 1-origin
+    for (std::vector<size_t>::const_iterator k = jac.begin();
+         k != jac.end(); ++k) {
+        value_type v = pend[*k - 1];                        // 0-origin
+        mainChain.insert(
+            std::lower_bound(mainChain.begin(), mainChain.end(), v), v);
     }
-    for (std::size_t p = 0; p < pend.size(); ++p)
-        if (!done[p])
-            result.insert(std::upper_bound(result.begin(), result.end(), pend[p]), pend[p]);
 
-    // 6) straggler を最後に挿入
-    if (hasStraggler)
-        result.insert(std::upper_bound(result.begin(), result.end(), straggler), straggler);
-
-    // 7) 元コンテナへ書き戻し
-    std::copy(result.begin(), result.end(), begin);
+    /* 5) 残りの pend 要素を順次挿入 */
+    for (size_t i = 0; i < pend.size(); ++i) {              // i:0-origin
+        if (!isJacobIndex(i + 1)) {                         // 1-origin
+            mainChain.insert(
+                std::lower_bound(mainChain.begin(), mainChain.end(), pend[i]),
+                pend[i]);
+        }
+    }
+    C.swap(mainChain);                                      // 結果を返却
 }
 
-// ---------------- コンテナごとの公開 API ------------------------ //
-
+/* ---------------- コンテナごとの公開 API ------------------- */
 void PmergeMe::sortVector(const std::vector<int> &in, std::vector<int> &out)
 {
     out = in;
-    fordJohnson(out.begin(), out.end());
+    fordJohnson(out);
 }
 
 void PmergeMe::sortDeque(const std::vector<int> &in, std::deque<int> &out)
 {
     out.assign(in.begin(), in.end());
-    fordJohnson(out.begin(), out.end());
+    fordJohnson(out);
 }
