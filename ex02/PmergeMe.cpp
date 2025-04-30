@@ -62,30 +62,37 @@ void fordJohnson(Cont &C)
 
     /* 1) ペア分割 */
     Cont mainChain, pend;
+    bool isStraggler = false;
+    std::vector<std::pair<value_type, value_type> > pairs;
     typename Cont::iterator it = C.begin();
     while (it != C.end()) {
         value_type first = *it++;          // 1 個目
         if (it == C.end()) {               // straggler
-            pend.push_back(first);
+            *it --;
+            isStraggler = true;
             break;
         }
         value_type second = *it;           // 2 個目
         if (first > second) std::swap(first, second);
+        pairs.push_back(std::make_pair(second, first)); // pair: 大→小
         mainChain.push_back(second);       // 大 → main
-        pend.push_back(first);             // 小 → pend
         ++it;
     }
 
     /* 2) mainChain を再帰的にソート */
     fordJohnson(mainChain);
 
-    /* 3) straggler を pend 挿入より前に処理 */
-    if (pend.size() > mainChain.size()) {
-        value_type straggler = pend.back();
-        pend.pop_back();
-        mainChain.insert(
-            std::lower_bound(mainChain.begin(), mainChain.end(), straggler),
-            straggler);
+    /* 3) pendをmainChainとpairに沿って挿入 */
+    for (size_t i = 0; i < mainChain.size(); ++i){
+        for (size_t j = 0; j < mainChain.size(); ++j) {
+            if (mainChain[i] == pairs[j].first) {
+                pend.push_back(pairs[j].second); // pair: 小 → pend
+                break;
+            }
+        }
+    }
+    if (isStraggler) {
+        pend.push_back(*it);            // straggler
     }
 
     /* 4) Jacobsthal シーケンスに従って pend を挿入 */
