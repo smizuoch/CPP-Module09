@@ -2,21 +2,19 @@
 #include <sstream>
 #include <cstdlib>
 
-namespace {
-    /* 内部スタック: std::list<int> を使い LIFO 操作 */
-    class Stack {
-        std::list<long> _lst;
-    public:
-        bool empty()   const { return _lst.empty(); }
-        std::size_t size() const { return _lst.size(); }
-        long  top()    const { return _lst.back(); }
-        void  push(long v)   { _lst.push_back(v); }
-        void  pop()          { _lst.pop_back(); }
-    };
+/* 内部スタック: std::list<int> を使い LIFO 操作 */
+class RPN::Stack {
+    std::list<long> _lst;
+public:
+    bool empty()   const { return _lst.empty(); }
+    std::size_t size() const { return _lst.size(); }
+    long  top()    const { return _lst.back(); }
+    void  push(long v)   { _lst.push_back(v); }
+    void  pop()          { _lst.pop_back(); }
+};
 
-    bool isOperator(const std::string &tok) {
-        return tok == "+" || tok == "-" || tok == "*" || tok == "/";
-    }
+bool RPN::isOperator(const std::string &tok) {
+    return tok == "+" || tok == "-" || tok == "*" || tok == "/";
 }
 
 bool RPN::evaluate(const std::string &expr, long &result)
